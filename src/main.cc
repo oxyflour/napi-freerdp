@@ -59,40 +59,44 @@ typedef struct Connection {
     settings->OrderSupport[NEG_ELLIPSE_SC_INDEX] = TRUE;
     settings->OrderSupport[NEG_ELLIPSE_CB_INDEX] = TRUE;
     freerdp_channels_pre_connect(rdp->context->channels, rdp);
-    rdp->context->cache = cache_new(rdp->settings);
     return TRUE;
   }
   BOOL onPostConnect() {
     rdp->update->BeginPaint    = [](rdpContext *context) { return conns[context->instance]->onBeginPaint(); };
     rdp->update->EndPaint      = [](rdpContext *context) { return conns[context->instance]->onEndPaint(); };
     rdp->update->DesktopResize = [](rdpContext *context) { return conns[context->instance]->onResizeDesktop(); };
+    rdp->context->cache = cache_new(rdp->settings);
     gdi_init(rdp, CLRCONV_ALPHA | CLRBUF_32BPP, NULL);
     freerdp_channels_post_connect(rdp->context->channels, rdp);
     return TRUE;
   }
 
   void onBeginPaint() {
+    auto hwnd = rdp->context->gdi->primary->hdc->hwnd;
+    hwnd->invalid->null = 1;
+    hwnd->ninvalid = 0;
     emit("begin-paint");
   }
   void onEndPaint() {
     // https://github.com/bloomapi/node-freerdp/blob/master/rdp.cc
     auto gdi = rdp->context->gdi;
     auto rect = gdi->primary->hdc->hwnd->invalid;
+    auto x = rect->x, y = rect->y, w = rect->w, h = rect->h;
     auto bpp = gdi->bytesPerPixel;
-    auto bytes = rect->w * rect->h * bpp;
+    auto bytes = w * h * bpp;
     auto buffer = new BYTE[bytes];
-    for (int i = rect->y, dst_pos = 0; i < rect->y + rect->h; i ++, dst_pos += rect->w * bpp) {
-      auto start_pos = (i * gdi->width * bpp) + (rect->x * bpp);
+    for (int i = y, dst_pos = 0; i < y + h; i ++, dst_pos += w * bpp) {
+      auto start_pos = (i * gdi->width * bpp) + (x * bpp);
       auto src = gdi->primary_buffer + start_pos;
       auto dst = buffer + dst_pos;
-      memcpy(dst, src, rect->w * bpp);
+      memcpy(dst, src, w * bpp);
     }
-    emit("paint", [rect, buffer, bytes](Napi::Env env) {
+    emit("paint", [x, y, w, h, buffer, bytes](Napi::Env env) {
       auto ret = Napi::Object::New(env);
-      ret.Set("x", Napi::Number::New(env, rect->x));
-      ret.Set("y", Napi::Number::New(env, rect->y));
-      ret.Set("w", Napi::Number::New(env, rect->w));
-      ret.Set("h", Napi::Number::New(env, rect->h));
+      ret.Set("x", Napi::Number::New(env, x));
+      ret.Set("y", Napi::Number::New(env, y));
+      ret.Set("w", Napi::Number::New(env, w));
+      ret.Set("h", Napi::Number::New(env, h));
       ret.Set("d", Napi::ArrayBuffer::New(env, buffer, bytes,
         [](Napi::Env env, void *data, BYTE *buffer) { delete buffer; }, buffer));
       return ret;
@@ -136,6 +140,7 @@ typedef struct Connection {
     if (options.Has("desktopHeight")) {
       settings->DesktopHeight = options.Get("desktopHeight").ToNumber().Int64Value();
     }
+    settings->BitmapCacheEnabled = true;
     // FIXME: segmentation fault without the following settings
     // https://github.com/FreeRDP/FreeRDP/blob/780d451afad21a22d2af6bd030ee71311856f038/client/common/cmdline.c#L1451
     settings->NlaSecurity = false;
@@ -187,16 +192,16 @@ typedef struct Connection {
 
       if (select(max_fds + 1, &rfdn, &wfdn, NULL, NULL) == -1) {
         if (!(errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS || errno == EINTR)) {
-          emit("error", std::string("select error ") + std::to_string(errno));
+          emit("error", "select error: " + std::to_string(errno));
           break;
         }
       }
       if (freerdp_check_fds(rdp) != TRUE) {
-        emit("error", "failed to check fd");
+        emit("error", "failed to check fd: " + std::to_string(freerdp_error_info(rdp)));
         break;
       }
       if (freerdp_channels_check_fds(channels, rdp) != TRUE) {
-        emit("error", "failed to check fd for channels");
+        emit("error", "failed to check fd for channels: " + std::to_string(freerdp_error_info(rdp)));
         break;
       }
     }
@@ -204,6 +209,7 @@ typedef struct Connection {
     freerdp_channels_close(channels, rdp);
     freerdp_channels_free(channels);
     gdi_free(rdp);
+    cache_free(rdp->context->cache);
     freerdp_free(rdp);
 
     emit("disconnected");
