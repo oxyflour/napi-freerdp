@@ -11,11 +11,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@types/node": "^14.0.27",
     "cmake-js": "^6.1.0",
     "node-addon-api": "^3.0.0"
   },
   "devDependencies": {
-    "bmp-js": "^0.1.0"
+    "@types/node": "^14.0.27",
+    "socket.io": "^2.3.0"
   }
 }

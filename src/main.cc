@@ -27,12 +27,10 @@ typedef struct Connection {
       func.Call({ Napi::String::New(env, evt), cb(env) });
     });
   }
-
   auto emit(const char *evt, std::string msg) {
     emit(evt, [msg](Napi::Env env) { return Napi::Error::New(env, msg).Value(); });
   }
-
-  auto emit(const char *evt, const char *msg = NULL) {
+  auto emit(const char *evt, const char *msg = "") {
     emit(evt, std::string(msg));
   }
 
