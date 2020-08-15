@@ -9,31 +9,42 @@ const cv = document.createElement('canvas'),
     dc = cv.getContext('2d')
 document.body.appendChild(cv)
 cv.tabIndex = -1
-cv.style.width = cv.height.height = '100%'
 cv.width = window.innerWidth
 cv.height = window.innerHeight
 cv.focus()
-cv.addEventListener('mousedown', evt => {
+window.addEventListener('mousedown', evt => {
     const key = ['left', 'middle', 'right'][evt.button]
     ws.emit('mouse', { x: evt.clientX, y: evt.clientY, opts: { [key]: true } })
 })
-cv.addEventListener('mouseup', evt => {
+window.addEventListener('mouseup', evt => {
     const key = ['left', 'middle', 'right'][evt.button]
     ws.emit('mouse', { x: evt.clientX, y: evt.clientY, opts: { [key]: false } })
 })
-cv.addEventListener('mousemove', evt => {
+window.addEventListener('mousemove', evt => {
     ws.emit('mouse', { x: evt.clientX, y: evt.clientY })
 })
-cv.addEventListener('keydown', evt => {
+window.addEventListener('keydown', evt => {
     ws.emit('key', { key: evt.key + (evt.location || ''), down: true })
 })
-cv.addEventListener('keyup', evt => {
+window.addEventListener('keyup', evt => {
     ws.emit('key', { key: evt.key + (evt.location || ''), down: false })
 })
 
-const ws = io(`/?width=${cv.width}&height=${cv.height}`)
+dc.font = '40px Verdana'
+dc.textAlign = 'center'
+dc.textBaseline = 'middle'
+const loadingInterval = setInterval(() => {
+    dc.clearRect(0, 0, cv.width, cv.height)
+    dc.fillText(host, cv.width / 2, cv.height / 2)
+    const idx = dc.loadingIndex = ((dc.loadingIndex || 0) + 1) % 8,
+        spinner = '_.-._.-._.-._.-._'.substr(idx, 8)
+    dc.fillText(spinner, cv.width / 2, cv.height / 2 + 100)
+}, 200)
+
+const host = new URL(location.href).pathname.replace(/^\//, ''),
+    ws = io(`/?host=${host}&width=${cv.width}&height=${cv.height}`)
 ws.on('connected', () => {
-    console.log('connected')
+    clearInterval(loadingInterval)
 })
 ws.on('paint', ({ x, y, w, h, d }) => {
     const im = dc.createImageData(w, h),
@@ -50,7 +61,10 @@ ws.on('paint', ({ x, y, w, h, d }) => {
     dc.putImageData(im, x, y)
 })
 ws.on('disconnect', () => {
-    console.log('disconnected')
+    clearInterval(loadingInterval)
+    dc.clearRect(0, 0, cv.width, cv.height)
+    dc.fillText(host, cv.width / 2, cv.height / 2)
+    dc.fillText('Disconnected', cv.width / 2, cv.height / 2 + 100)
 })
 
 </script>

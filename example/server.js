@@ -11,17 +11,17 @@ const server = require('http').createServer((req, res) => {
 
 const io = require('socket.io')(server)
 io.on('connect', ws => {
-    const { width, height } = ws.handshake.query
+    const { width, height, host, username } = ws.handshake.query
     const conn = new Connection({
-        serverHostName: 'nuc7.yff.me',
-        username: 'oxyflour',
-        password: process.env.FREERDP_TEST_PASSWORD,
+        serverHostName: host,
+        username: username || 'guest',
+        password: '',
         ignoreCertificate: true,
         desktopWidth: width || 1024,
         desktopHeight: height || 768,
     })
     conn.on('paint', ({ x, y, w, h, d }) => {
-        ws.emit('paint', ({ x, y, w, h, d }))
+        ws.compress(true).emit('paint', ({ x, y, w, h, d }))
     })
     conn.on('error', err => {
         console.error(err)
